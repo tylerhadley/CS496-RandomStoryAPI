@@ -1,0 +1,290 @@
+<!DOCTYPE html> 
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1"> 
+	<title>Random Stories</title> 
+	<link rel="stylesheet" href="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.css" />
+	<script src="http://code.jquery.com/jquery-1.11.1.min.js"></script>
+	<script src="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script>
+</head> 
+
+<body> 
+
+<div data-role="page" id="page1">
+	<div data-role="header">
+		<h1>Fill out a story</h1>
+	</div><!-- /header -->
+	<div data-role="content">	
+		<div id="writearea">
+			<p>Loading random story...</p>
+		</div> <!-- /writearea -->	
+	</div><!-- /content -->
+	<div data-role="footer">
+		<h4>Swipe to write a story</h4>
+	</div><!-- /footer -->
+</div><!-- /page1 -->
+
+<div data-role="page" id="page2">
+	<div data-role="header">
+		<h1>Write a story</h1>
+	</div><!-- /header -->
+	<div data-role="content">	
+		<div id="writearea2">
+			<p>Enter a username to get started:</p>
+			<div><input type='text' id="user"></div>
+			<div><button onClick='submitUser()' data-role='button'>Start Writing!</button></div>
+		</div> <!-- /writearea -->	
+	</div><!-- /content -->
+	<div data-role="footer">
+		<h4>Swipe to fill out a story</h4>
+	</div><!-- /footer -->
+	<div data-role="popup" id="message">
+		<div id="alertarea"/>
+	</div>
+</div><!-- /page2 -->
+
+
+
+<script>
+$(window).load(getStory());
+var story_parsed = [];
+var word_fields = [];
+var stories = [];
+var obj_story;
+var username;
+var control_list = ["noun", "pronoun", "verb", "adjective", "adverb", "exclamation"];
+var story_id = 0;
+
+$(function(){ //swipe to change pages
+  	$( "#page1" ).on( "swipe", swipeHandler );
+  	function swipeHandler( event ){
+    		$.mobile.changePage( "#page2", { transition: "flip"} );
+  	}
+});
+
+$(function(){
+  	$( "#page2" ).on( "swipe", swipeHandler );
+  	function swipeHandler( event ){
+    		$.mobile.changePage( "#page1", { transition: "flip"} );
+  	}
+});
+
+function startOver(){
+	location.reload();
+}
+
+function parseStory(story){
+	obj_story = story;
+	var copy = false;
+	var temp = [];
+	for (var i = 0, len = story.the_story.length; i < len; i++) {
+		if (story.the_story[i] == '<') {copy = true; story_parsed.push(temp.join("")); temp = [];} //write non-blank word segment
+		else if (story.the_story[i] == '>') { //write blank word segment
+			copy = false; 
+			var keyword = temp.join("").toLowerCase();
+			if($.inArray(keyword, control_list) != -1){ //make sure story is valid
+				word_fields.push(keyword);
+					story_parsed.push(keyword);
+			}else{location.reload();}//fetch new story if it pulls one that is malformed			
+			temp = [];
+		}
+		else if (copy){temp[temp.length] = story.the_story[i];} //copy letter to temp
+		else if (!copy){temp[temp.length] = story.the_story[i];} 
+	}
+	story_parsed.push(temp.join("")); //write remaining story.
+	temp = [];
+	writeStory(word_fields);
+}
+
+function writeStory(word_fields){ //write word blanks and buttons to screen
+	$("#writearea").html("<div><h3>Fill out these words to generate a random story:</h3></div>");
+	for(var i=0, len = word_fields.length; i < len; i++){
+		$("#writearea").append("<div>"+word_fields[i]+"<input type='text' id="+i+"></div>");
+	}
+	$("#writearea").append("<div><button onClick='submitWords(false)' data-role='button'>Get Results!</button></div>");
+	$("#writearea").append("<div><button onClick='startOver()' data-role='button'>Get a Different One.</button></div>");
+	$("#writearea").append("<div><button onClick='submitWords(true)' data-role='button'>Fill Randomly!</button></div>");
+	if ( $('#writearea').hasClass('ui-listview')) {
+    		$('#writearea').listview('refresh');
+     	} 
+	else {
+    		$('#writearea').trigger('create');
+     	}
+}
+
+function getStory(){ //fetch random story to be filled out
+	$.ajax({
+		type: "GET",
+		url: 'http://cool-ship-92801.appspot.com/story',
+		async:true,
+		dataType : 'json',
+		crossDomain:true,
+		success: parseStory,
+		failure: function(){
+			$("#writearea").append("<p>An error occurred and no story could be fetched.</p>");
+		}
+	});
+}
+
+function submitWords(fill_randomly){ //either upload provided words or randomly fill blanks, display completed story
+	var the_words = [];
+	var index=0;
+	if(fill_randomly){
+		for(var i=0, len=word_fields.length; i<len; i++){
+			$.ajax({
+				type: "GET",
+				url: 'http://cool-ship-92801.appspot.com/'+word_fields[i],
+				async:false,
+				dataType : 'json',
+				crossDomain:true,
+				indexValue: i,
+				success: function(data) {
+					the_words[this.indexValue] = data.word;			
+				},
+				failure: function(){
+					alert('An error occurred');
+				}
+			});	
+		}
+	}
+	for(var j=0, len=word_fields.length; j<len; j++){
+		if(!fill_randomly){the_words[j] = $("#"+j+"").val();}
+		if(!fill_randomly){if(the_words[j]){$.post( "http://cool-ship-92801.appspot.com/"+word_fields[j], { word: the_words[j]} );}}
+		for(k=index, len=story_parsed.length; k < len; k++){
+			if(story_parsed[k] == word_fields[j]){
+				story_parsed[k] = the_words[j];
+				if(!the_words[j]){story_parsed[k] = "(Word not entered)";}
+				index++;
+				break;
+			}
+		}
+	}
+	$("#writearea").html("<h3>Title: "+obj_story.title+"</h3>");
+	$("#writearea").append("<p>"+story_parsed.join("")+"</p>");
+	$("#writearea").append("<div><button onClick='startOver()' data-role='button'>Again!</button></div>");
+	if ( $('#writearea').hasClass('ui-listview')) {//update jquery mobile enhancement
+    		$('#writearea').listview('refresh');
+     	} 
+	else {
+    		$('#writearea').trigger('create');
+     	}
+}
+
+function submitUser(){
+	$.ajax({
+	type: "GET",
+	url: 'http://cool-ship-92801.appspot.com/user/'+$("#user").val(),
+	async:true,
+	dataType : 'json',
+	crossDomain:true,
+	success: function(data, textStatus, xhr) {
+		if(xhr.status == 200){
+			username = data.name;
+			stories = data.stories;
+			writeStoryArea();
+		}
+		else{ 
+			$.post('http://cool-ship-92801.appspot.com/user', { name: $("#user").val()} );
+			username = $("#user").val();
+			writeStoryArea();
+		}		
+	},
+	error: function(){
+		$("#writearea2").append("<p>An error occurred</p>");
+	}
+	});
+}
+
+function writeStoryArea(){
+	$("#writearea2").html("<p>How to write a story template: Write a story, putting &lt;keyword&gt; as a placeholder for the words you want to be variable. <br/>Accepted keywords are &lt;noun&gt;, &lt;pronoun&gt;, &lt;verb&gt;, &lt;adjective&gt;, &lt;adverb&gt; and &lt;exclamation&gt;.</p>");
+	$("#writearea2").append("<div><input type='text' id='storytitle' placeholder='Enter the title of your story'/></div>");
+	$("#writearea2").append("<div><textarea id='writtenstory' rows='4' placeholder='Example: Yesterday, we went to the &lt;adjective&gt; &lt;noun&gt;.'></textarea></div>");
+	$("#writearea2").append("<div><button onClick='submitStory()' data-role='button'>Submit!</button></div>");
+	$("#writearea2").append("<div><button onClick='startOver()' data-role='button'>Start over</button></div>");
+	if(stories.length > 0){loadStories();}
+	if ( $('#writearea2').hasClass('ui-listview')) {//update jquery mobile enhancement
+    		$('#writearea2').listview('refresh');
+     	} 
+	else {
+    		$('#writearea2').trigger('create');
+     	}
+}
+
+function loadStories(){
+	var dropdown = $('<select id="edit"/>');
+	for(i=0; i<stories.length; i++){
+		$('<option />', {value: stories[i].key, text: "Select my story: "+stories[i].title}).appendTo(dropdown);
+	} 
+	dropdown.appendTo('#writearea2');
+	$("#writearea2").append("<div><button onClick='editStory()' data-role='button'>Edit my story!</button></div>");
+}
+
+function editStory(){
+	story_id = $('#edit').val();
+	$.ajax({
+	type: "GET",
+	url: 'http://cool-ship-92801.appspot.com/story/'+story_id,
+	async:true,
+	dataType : 'json',
+	crossDomain:true,
+	success: function(data) {
+		$('#storytitle').val(data.title);
+		$('#writtenstory').val(data.the_story);			
+	},
+	error: function(){
+		$("#writearea2").append("<p>An error occurred</p>");
+	}
+	});
+}
+
+function resetStory(){
+	$('#storytitle').val("");
+	$('#writtenstory').val("");
+	story_id = 0;
+}
+function submitStory(){
+	if(story_id != 0){
+		$.ajax({
+  		url: 'http://cool-ship-92801.appspot.com/story/'+story_id,
+  		type: 'PUT',
+		dataType : 'json',
+  		data: {the_story:$('#writtenstory').val()},
+		crossDomain:true,
+  		success: function(data) {
+			alert("Story updated!");
+			resetStory();	
+  		}
+		});
+	}else{
+		$.ajax({ //post new story
+  		url: 'http://cool-ship-92801.appspot.com/story',
+  		type: 'POST',
+		dataType : 'json',
+		userid: username,
+		async:false,
+  		data: {title: $('#storytitle').val(), the_story:$('#writtenstory').val()},
+		crossDomain:true,
+  		success: function(data) {
+			$.ajax({ //link story to user
+  			url: 'http://cool-ship-92801.appspot.com/user/'+this.userid,
+  			type: 'PUT',
+  			data: "stories="+data.key,
+			crossDomain:true,
+			success: function(data){
+				alert("Story saved!");
+			}
+			});
+  		},
+		error: function(data){
+			alert("Story is blank or improperly formatted.");
+		}
+		});
+	
+	}
+
+}
+</script>
+</body>
+</html>
